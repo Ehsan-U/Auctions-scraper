@@ -77,7 +77,6 @@ def save_auctions(all_auctions,current_date, current_url):
         
         prev = ""
         for key_value in detail.split('\n'):
-            print(key_value)
             if ":" in key_value:
                 if "Property" in key_value and "Parcel" in key_value:
                     key1, key2, val = key_value.split(':')
