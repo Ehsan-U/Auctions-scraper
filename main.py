@@ -58,40 +58,47 @@ class AuctionScraper():
         text = "$" + text
         return text
 
-    def get_auctions(self, driver):
+    @staticmethod
+    def extract_date(driver):
         current_url = driver.current_url
-        all_auctions = []
-        self.wait_for_selector(driver, "//div[@isset='1']")
         parsed = parse_qs(urlparse(current_url).query)
         current_date = parsed.get("AUCTIONDATE")
         if current_date is None:
             current_date = parsed.get("AuctionDate")[0]
         else:
             current_date = current_date[0]
-        for area in self.AREA_LIST:
-            try:
-                max_pages = int(driver.find_element(By.XPATH, f'//div[@class="Head_{area}"]//span[@id="max{area}A"]').text)
-            except:
-                logger.debug(f'can not get AREA_LIST: {area}')
-                continue
+        return current_date
+
+    @staticmethod
+    def get_maxpages(driver,area):
+        try:
+            max_pages = int(driver.find_element(By.XPATH, f'//div[@class="Head_{area}"]//span[@id="max{area}A"]').text)
+        except:
+            logger.debug(f'can not get AREA_LIST: {area}')
+            return 0
+        else:
             logger.debug(f'{area} {max_pages} //div[@class="Head_{area}"]//span[@id="maxCA"]')
+            return max_pages
+
+    def get_auctions(self, driver):
+        all_auctions = []
+        current_url = driver.current_url
+        current_date = self.extract_date(driver)
+        self.wait_for_selector(driver, "//div[@isset='1']")
+        for area in self.AREA_LIST:
+            max_pages = self.get_maxpages(driver,area)
             for i in range(max_pages):
                 logger.info(f'Scraping page no: {i+1} from website ({current_date})')
                 collected_auctions_status = driver.find_elements(By.XPATH, f'//div[@id="Area_{area}"]//div[@isset="1"]//div[@class="AUCTION_STATS"]')
                 collected_auctions_details = driver.find_elements(By.XPATH, f'//div[@id="Area_{area}"]//div[@isset="1"]//table[@class="ad_tab"]')
-
                 if collected_auctions_status and collected_auctions_details:
                     for status, detail in zip(collected_auctions_status, collected_auctions_details):
                         all_auctions.append((status.text, detail.text))
-
                     driver.find_element(By.XPATH, f'//div[@class="Head_{area}"]//div[@class="PageFrame"]//span[@class="PageRight"]/img').click()
                     time.sleep(2)
-        try:
-            self.save_auctions(all_auctions, current_date, current_url)
-        except Exception as e:
-            pass
+        return (all_auctions, current_url)
 
-    def save_auctions(self, all_auctions,current_date, current_url):
+    def append_to_data(self, all_auctions, current_url):
         for status, detail in all_auctions:
             details = {
                 "Auction Sold": None,
@@ -196,7 +203,9 @@ class AuctionScraper():
                 for date_ in calender:
                     driver.get(f"https://{domain}/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE={date_}")
                     self.wait_for_selector(driver, "//div[contains(@id, 'AITEM')][1]")
-                    self.get_auctions(driver)
+                    all_auctions, current_url = self.get_auctions(driver)
+                    if all_auctions:
+                        self.append_to_data(all_auctions, current_url)
                     driver.back()
                 if self.wait_for_selector(driver, previous):
                     previous_url = driver.find_element(By.XPATH, previous).get_attribute("href")
@@ -204,10 +213,9 @@ class AuctionScraper():
                     continue
                 else:
                     break
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, Exception):
             pass
-        finally:
-            self.save()
+
 
     def start(self):
         driver = self.init_driver()
@@ -216,6 +224,7 @@ class AuctionScraper():
         site_id = site_ids.pop(0)
         domain = self.get_domain(site_id)
         self.init_scraper(driver, domain)
+        self.save()
         driver.quit()
 
 auction_scraper = AuctionScraper()
