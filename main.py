@@ -78,11 +78,11 @@ def save_auctions(all_auctions,current_date, current_url):
         prev = ""
         for key_value in detail.split('\n'):
             if ":" in key_value:
-                if "Property" in key_value and "Parcel" in key_value:
-                    key1, key2, val = key_value.split(':')
-                    details[key1.strip()] = ''
-                    details[key2.strip()] = val.strip()
-                    prev = key2
+                # if "Property Address".lower() in key_value.lower() and "Parcel size".lower() in key_value.lower():
+                if len(key_value.split(':')) == 3:
+                    key, val1, val2 = key_value.split(':')
+                    details[key.strip()] = val1.strip() + ' ' + val2.strip()
+                    prev = key
                 else:
                     key, value = key_value.split(':')
                     details[key.strip()] = value.strip()
@@ -117,6 +117,10 @@ def wait_for_click(element):
         return None
     else:
         return True
+
+def add_dollor(text):
+    text = "$"+text
+    return text
 
 THEME = 'DarkBlack'
 HEADLESS = False
@@ -204,9 +208,17 @@ try:
             break
 except KeyboardInterrupt:
     pass
+
+
 out_name = f'./{output_dir}/{selected_county.replace(" ","_").replace(".","")}.xlsx'
 if data:
     df = pd.DataFrame(data)
     df = df[df['Sold To'] == '3rd Party Bidder']
+    if 'Amount' in df.columns:
+        df['Amount'] = df['Amount'].replace("[\$\,]",'', regex=True).astype(float)
+        df = df.sort_values(by=['Amount'], ascending=False)
+        df['Amount'] = df['Amount'].astype(str).apply(add_dollor)
+    else:
+        pass
     df.to_excel(out_name, index=False)
 driver.quit()
